@@ -13,7 +13,9 @@ app.use(cors({ origin: "*" })); // CLMなどからのfetch許可
 // === Vault設定 ===
 const VAULT_DOMAIN = process.env.VAULT_DOMAIN;
 const VAULT_VERSION = process.env.VAULT_API_VERSION || "v23.1";
-const SESSION_ID = process.env.VAULT_SESSION_ID;
+
+
+// const SESSION_ID = process.env.VAULT_SESSION_ID;
 
 // === Gmail設定 ===
 const transporter = nodemailer.createTransport({
@@ -26,6 +28,18 @@ const transporter = nodemailer.createTransport({
 
 // === Vaultファイル取得関数 ===
 async function fetchVaultFile(documentId) {
+
+  const authRes = await axios.post(
+  `https://${VAULT_DOMAIN}/api/v23.1/auth`,
+  new URLSearchParams({
+    username: process.env.VAULT_USER,
+    password: process.env.VAULT_PASS,
+  }),
+  { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+);
+
+  const SESSION_ID = authRes.data.sessionId;
+  
   const url = `https://${VAULT_DOMAIN}/api/${VAULT_VERSION}/objects/documents/${documentId}/file`;
   const res = await axios.get(url, {
     headers: { Authorization: `Bearer ${SESSION_ID}`, Accept: "*/*" },
@@ -110,6 +124,25 @@ ${mailText}
 app.get("/", (req, res) => {
   res.send("Vault Print API is running ✅");
 });
+
+app.get("/test-vault", async (req, res) => {
+  try {
+    const authRes = await axios.post(
+  `https://${VAULT_DOMAIN}/api/v23.1/auth`,
+  new URLSearchParams({
+    username: process.env.VAULT_USER,
+    password: process.env.VAULT_PASS,
+  }),
+  { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+);
+
+  const SESSION_ID = authRes.data.sessionId;
+    res.json({ status: "ok", message: "Vault reachable ✅", data: SESSION_ID });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // === Render用ポート設定 ===
 const PORT = process.env.PORT || 3000;
