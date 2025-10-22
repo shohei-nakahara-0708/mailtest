@@ -3,6 +3,7 @@ import cors from "cors";
 import axios from "axios";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import sgMail from "@sendgrid/mail";
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ app.use(cors({ origin: "*" })); // CLMなどからのfetch許可
 const VAULT_DOMAIN = process.env.VAULT_DOMAIN;
 const VAULT_VERSION = process.env.VAULT_API_VERSION || "v23.1";
 
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // const SESSION_ID = process.env.VAULT_SESSION_ID;
 
@@ -58,9 +60,13 @@ async function fetchVaultFile(documentId) {
     if (match) fileName = decodeURIComponent(match[1]);
   }
 
+   const rawType = res.headers["content-type"] || "application/pdf";
+  const cleanType = rawType.split(";")[0].trim();
+
   return {
     filename: fileName,
-    content: Buffer.from(res.data),
+    content: Buffer.from(res.data).toString("base64"),// ← APIはbase64形式
+    type: cleanType,
   };
 }
 
@@ -89,6 +95,9 @@ app.post("/print", async (req, res) => {
       results.push({ documentId, copies, dueDate, filename: attachment.filename });
     }
 
+    console.log(attachments);
+    
+
     let mailText = "";
     for (const ret of results) {
       mailText += `
@@ -113,7 +122,12 @@ ${mailText}
 ---
 自動送信：Veeva Vault 印刷連携システム
       `,
-      attachments,
+      attachments: attachments.map((a) => ({
+        content: a.content,
+        filename: a.filename,
+        type: a.type,
+        disposition: "attachment",
+      })),
     };
 
     let totalSize = attachments.reduce((sum, att) => sum + att.content.length, 0);
@@ -121,12 +135,12 @@ ${mailText}
 
     try {
   console.log("メール送信中...");
-  const info = await transporter.sendMail(mailOptions);
+  const info = await sgMail.send(mailOptions);
   console.log("メール送信完了:", info.response);
   res.json({ ok: true, info });
 } catch (err) {
   console.error(" メール送信エラー詳細:", err);
-  res.status(500).json({ error: err.message, stack: err.stack });
+  res.status(500).json({ error: err.message, details: err.response?.body });
 }
 
     
