@@ -19,11 +19,14 @@ const VAULT_VERSION = process.env.VAULT_API_VERSION || "v23.1";
 
 // === Gmail設定 ===
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS, // Gmailアプリパスワード
+    pass: process.env.MAIL_PASS,
   },
+  connectionTimeout: 30000, // 30秒でタイムアウト
 });
 
 // === Vaultファイル取得関数 ===
@@ -39,6 +42,9 @@ async function fetchVaultFile(documentId) {
 );
 
   const SESSION_ID = authRes.data.sessionId;
+
+  console.log(SESSION_ID);
+  
   
   const url = `https://${VAULT_DOMAIN}/api/${VAULT_VERSION}/objects/documents/${documentId}/file`;
   const res = await axios.get(url, {
@@ -109,9 +115,18 @@ ${mailText}
       attachments,
     };
 
-    console.log("📧 メール送信中...");
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ メール送信完了:", info.response);
+    let totalSize = attachments.reduce((sum, att) => sum + att.content.length, 0);
+    console.log(`📎 添付ファイル合計サイズ: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
+
+    try {
+  console.log("📧 メール送信中...");
+  const info = await transporter.sendMail(mailOptions);
+  console.log("✅ メール送信完了:", info.response);
+  res.json({ ok: true, info });
+} catch (err) {
+  console.error("❌ メール送信エラー詳細:", err);
+  res.status(500).json({ error: err.message, stack: err.stack });
+}
 
     res.json({ status: "ok", sent: info.response, files: results });
   } catch (err) {
