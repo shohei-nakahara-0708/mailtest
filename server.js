@@ -19,14 +19,12 @@ const VAULT_VERSION = process.env.VAULT_API_VERSION || "v23.1";
 
 // === Gmail設定 ===
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
+  host: "smtp.sendgrid.net",
   port: 587,
-  secure: false,
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
+    user: "apikey",  // ← 固定
+    pass: process.env.SENDGRID_API_KEY, // ← SendGridのAPIキー
   },
-  connectionTimeout: 30000, // 30秒でタイムアウト
 });
 
 // === Vaultファイル取得関数 ===
@@ -69,13 +67,16 @@ async function fetchVaultFile(documentId) {
 // === メール送信API ===
 app.post("/print", async (req, res) => {
   try {
-    const { documentIds, orders } = req.body;
+    const { documentIds, orders, toEmail } = req.body;
+    
+    console.log(toEmail);
+    
 
     if (!documentIds || documentIds.length === 0) {
       return res.status(400).json({ error: "documentIds is required" });
     }
 
-    console.log("📦 取得リクエスト:", documentIds);
+    console.log(" 取得リクエスト:", documentIds);
 
     const attachments = [];
     const results = [];
@@ -99,7 +100,7 @@ app.post("/print", async (req, res) => {
 
     const mailOptions = {
       from: process.env.MAIL_USER,
-      to: process.env.TO_EMAIL,
+      to: toEmail,
       subject: "【印刷依頼】Vault資料の印刷をお願いします",
       text: `
 印刷ご担当者様
@@ -119,18 +120,18 @@ ${mailText}
     console.log(`📎 添付ファイル合計サイズ: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
 
     try {
-  console.log("📧 メール送信中...");
+  console.log("メール送信中...");
   const info = await transporter.sendMail(mailOptions);
-  console.log("✅ メール送信完了:", info.response);
+  console.log("メール送信完了:", info.response);
   res.json({ ok: true, info });
 } catch (err) {
-  console.error("❌ メール送信エラー詳細:", err);
+  console.error(" メール送信エラー詳細:", err);
   res.status(500).json({ error: err.message, stack: err.stack });
 }
 
-    res.json({ status: "ok", sent: info.response, files: results });
+    
   } catch (err) {
-    console.error("❌ エラー:", err.message);
+    console.error(" エラー:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -152,7 +153,7 @@ app.get("/test-vault", async (req, res) => {
 );
 
   const SESSION_ID = authRes.data.sessionId;
-    res.json({ status: "ok", message: "Vault reachable ✅", data: SESSION_ID });
+    res.json({ status: "ok", message: "Vault reachable", data: SESSION_ID });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -161,4 +162,4 @@ app.get("/test-vault", async (req, res) => {
 
 // === Render用ポート設定 ===
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
